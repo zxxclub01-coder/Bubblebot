@@ -3,19 +3,36 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import json
 import os
-import pytz 
+import pytz
+from flask import Flask
+from threading import Thread
 
 # ==========================================
-# [설정 구간]
-# 토큰은 이제 코드에 적지 않고 서버 설정에서 가져옵니다.
+# [1. 가짜 웹 서버 설정] Koyeb이 8000번 포트를 두드리면 대답하는 역할
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "I am alive! (Bot Running)"
+
+def run():
+    # Koyeb은 보통 8000번 포트를 사용함
+    app.run(host='0.0.0.0', port=8000)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+# ==========================================
+
+# [2. 봇 설정]
 try:
     TOKEN = os.environ["TOKEN"]
 except KeyError:
     print("에러: 환경 변수 'TOKEN'이 설정되지 않았습니다.")
     TOKEN = "설정필요"
 
-# 채널 ID는 공개되어도 해킹 위험은 없지만, 수정해서 사용하세요.
-CHANNEL_ID = 123456789012345678 
+# 채널 ID 수정 필요
+CHANNEL_ID = 1466739477941850174
 # ==========================================
 
 intents = discord.Intents.default()
@@ -43,11 +60,9 @@ def save_data(data):
 
 @bot.event
 async def on_ready():
-    print(f'{bot.user} 봇이 로그인했습니다! (서버 환경)')
-    if not daily_check.is_running():
-        daily_check.start()
-    if not check_reminder.is_running():
-        check_reminder.start()
+    print(f'{bot.user} 봇이 로그인했습니다!')
+    if not daily_check.is_running(): daily_check.start()
+    if not check_reminder.is_running(): check_reminder.start()
 
 @bot.event
 async def on_message(message):
@@ -95,17 +110,13 @@ async def daily_check():
                 data['life'] -= 1
                 data['last_penalty_date'] = today_str
                 save_data(data)
-                
                 ch = bot.get_channel(CHANNEL_ID)
                 if ch:
                     if data['life'] == 0:
-                        desc = "어제 출석을 하지 않아 Life가 **0**이 되었습니다.\n**이제 아이템을 사용할 수 없습니다.**"
-                        embed = discord.Embed(title="☠️ LIFE 소멸 ☠️", description=desc, color=0x000000)
+                        embed = discord.Embed(title="☠️ LIFE 소멸 ☠️", description="어제 미접속! Life 0.", color=0x000000)
                         await ch.send(content="@everyone", embed=embed)
                     else:
-                        desc = "어제 출석을 하지 않아 **Life가 1 감소**했습니다."
-                        embed = discord.Embed(title="💔 Life 차감 알림", description=desc, color=0xff0000)
-                        embed.add_field(name="남은 Life", value=f"**{data['life']}개**", inline=False)
+                        embed = discord.Embed(title="💔 Life 차감", description=f"어제 미접속! **Life 1 감소**\n남은 Life: {data['life']}개", color=0xff0000)
                         await ch.send(embed=embed)
         else:
             data['last_penalty_date'] = today_str
@@ -117,7 +128,7 @@ async def 라이프(ctx, count: int):
     data = load_data()
     data["life"] = count
     save_data(data)
-    await ctx.send(f"❤️ **Life 개수를 {count}개로 설정했습니다.**")
+    await ctx.send(f"❤️ **Life {count}개로 설정.**")
 
 @bot.command()
 async def 취소(ctx):
@@ -125,7 +136,7 @@ async def 취소(ctx):
     data = load_data()
     data["last_date"] = None
     save_data(data)
-    await ctx.send("🔄 **오늘 출석 기록을 취소했습니다.**")
+    await ctx.send("🔄 **기록 취소 완료.**")
 
 @tasks.loop(minutes=30)
 async def check_reminder():
@@ -139,4 +150,6 @@ async def check_reminder():
                 embed = discord.Embed(title="🚨 경고", description=msg, color=0xff0000)
                 await ch.send(content="@everyone", embed=embed)
 
+# 봇 실행 전 가짜 서버 켜기
+keep_alive()
 bot.run(TOKEN)
